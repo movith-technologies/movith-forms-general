@@ -1,0 +1,7 @@
+# Frontend ve Backend klasörleri ayrı repo'larda yönetiliyor
+Frontend/
+Backend/
+
+# Cursor IDE dosyaları (secret içerebilir)
+.cursor/
+
