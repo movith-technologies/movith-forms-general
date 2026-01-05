@@ -3,5 +3,5 @@ Frontend/
 Backend/
 
 # Cursor IDE dosyaları (secret içerebilir)
-.cursor/
-
+# .cursor/
+# Because private repo, we don't need to ignore .cursor folder.

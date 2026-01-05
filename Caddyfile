@@ -1,0 +1,23 @@
+forms.movith.com {
+  encode gzip zstd
+
+  # Upload limit (100MB - video için yeterli buffer)
+  request_body {
+    max_size 100MB
+  }
+
+  # /backend-api/* isteğini backend'in /api/* endpointlerine map et
+  handle_path /backend-api/* {
+    rewrite * /api{path}
+    reverse_proxy api:8080 {
+      # Backend'e header'ları ilet
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+
+  # Everything else -> Next.js frontend
+  handle {
+    reverse_proxy frontend:3000
+  }
+}
+
