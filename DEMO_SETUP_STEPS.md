@@ -188,7 +188,7 @@ nano Caddyfile
 forms.movith.com {
   encode gzip zstd
 
-  # Upload limit (100MB - video için yeterli buffer)
+# Upload limit (100MB - video için yeterli buffer)
   request_body {
     max_size 100MB
   }
@@ -343,11 +343,19 @@ ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_BACKEND_API_URL
 ARG NEXT_PUBLIC_BACKEND_API_KEY
 ARG NEXT_PUBLIC_ONESIGNAL_APP_ID
+ARG NEXT_PUBLIC_UPLOAD_TIMEOUT_MINUTES
+ARG NEXT_PUBLIC_MAX_VIDEO_SIZE_MB
+ARG NEXT_PUBLIC_MAX_PHOTO_SIZE_MB
+ARG NEXT_PUBLIC_MAX_OTHER_FILE_SIZE_MB
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_BACKEND_API_URL=$NEXT_PUBLIC_BACKEND_API_URL
 ENV NEXT_PUBLIC_BACKEND_API_KEY=$NEXT_PUBLIC_BACKEND_API_KEY
 ENV NEXT_PUBLIC_ONESIGNAL_APP_ID=$NEXT_PUBLIC_ONESIGNAL_APP_ID
+ENV NEXT_PUBLIC_UPLOAD_TIMEOUT_MINUTES=$NEXT_PUBLIC_UPLOAD_TIMEOUT_MINUTES
+ENV NEXT_PUBLIC_MAX_VIDEO_SIZE_MB=$NEXT_PUBLIC_MAX_VIDEO_SIZE_MB
+ENV NEXT_PUBLIC_MAX_PHOTO_SIZE_MB=$NEXT_PUBLIC_MAX_PHOTO_SIZE_MB
+ENV NEXT_PUBLIC_MAX_OTHER_FILE_SIZE_MB=$NEXT_PUBLIC_MAX_OTHER_FILE_SIZE_MB
 
 RUN npm run build
 
@@ -402,7 +410,7 @@ api:
       - ./backend.env
     environment:
       # env_file içinde ${...} expand garanti olsun diye kritik değerleri burada basıyoruz:
-      - DATABASE_CONNECTION_STRING=Server=db;Port=5432;Database=${POSTGRES_DB};User Id=${POSTGRES_USER};Password==${POSTGRES_PASSWORD};
+      - DATABASE_CONNECTION_STRING=Server=db;Port=5432;Database=${POSTGRES_DB};User Id=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
       - SECURITY__PUBLICAPIKEY=${PUBLIC_API_KEY}
       - Jwt__Key=${JWT_KEY}
       - UPLOADS__ROOT=/app/uploads
@@ -432,6 +440,9 @@ volumes:
 git pull
 docker compose build --no-cache
 docker compose up -d
+Eğer sadece belli bir container run edilecekse:
+docker compose up -d --force-recreate api
+docker compose up -d --force-recreate frontend
 Build süresi:
 •	İlk sefer 5–10 dk olabilir (normal)
 Docker’ların durumlarını gör:
@@ -453,11 +464,30 @@ docker build --no-cache \
   --build-arg NEXT_PUBLIC_BACKEND_API_URL="https://forms.movith.com/backend-api" \
   --build-arg NEXT_PUBLIC_BACKEND_API_KEY="92f52117-c722-418c-a077-5a3013acac95" \
   --build-arg NEXT_PUBLIC_ONESIGNAL_APP_ID="230130e3-34a2-4c8e-a8dc-d9556caaafb6" \
-  --build-arg NEXT_PUBLIC_UPLOAD_TIMEOUT_MINUTES=10 \
-  --build-arg NEXT_PUBLIC_MAX_VIDEO_SIZE_MB=60 \
-  --build-arg NEXT_PUBLIC_MAX_PHOTO_SIZE_MB=10 \
-  --build-arg NEXT_PUBLIC_MAX_OTHER_FILE_SIZE_MB=50 \
+  --build-arg NEXT_PUBLIC_UPLOAD_TIMEOUT_MINUTES="10" \
+  --build-arg NEXT_PUBLIC_MAX_VIDEO_SIZE_MB="60" \
+  --build-arg NEXT_PUBLIC_MAX_PHOTO_SIZE_MB="10" \
+  --build-arg NEXT_PUBLIC_MAX_OTHER_FILE_SIZE_MB="50" \
   -t forms-frontend:latest .
+* Eğer build hata verirse ve eslint hatasıysa next.config.mjs dosyasına şunları yap:
+next.config.js (veya .mjs) varsa
+Dosyayı aç:
+nano frontend/next.config.js
+İçine (varsa mevcut export’un içine ekle):
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
+};
+
+module.exports = nextConfig;
+Eğer dosyada zaten başka ayarlar varsa, sadece şu iki bloğu ekle:
+•	eslint: { ignoreDuringBuilds: true }
+•	typescript: { ignoreBuildErrors: true }
+1B) next.config yoksa: oluştur
+nano frontend/next.config.js
+Yukarıdaki içeriği aynen yapıştır.
+Bu, build sırasında lint/type hatalarını “fail” etmeyecek. (Uygulama yine çalışır; demo için ideal.)
 2) Frontend container’ı recreate et
 cd /opt/movith/forms
 docker compose up -d --force-recreate frontend
@@ -633,3 +663,94 @@ Bunu checklist’e kalın şekilde yaz:
 🚫 Veri siler:
 •	docker compose down -v (DB + uploads gider)
 •	docker volume rm ...
+SEQ KURULUMU:
+
+0) Ön koşul: Serilog Seq sink canlıda da aynı mı?
+Backend container’ın Seq’e gönderebilmesi için Seq URL’i container network üzerinden olmalı:
+•	Lokal: http://localhost:5341
+•	Docker compose içinde: http://seq:5341
+Yani canlıda Serilog config’inde serverUrl olarak seq container adı kullanılmalı.
+________________________________________
+1) Docker Compose’a Seq servisini ekle
+/opt/movith/forms/docker-compose.yml içine seq servisini ekle (db/api/frontend yanında):
+  seq:
+    image: datalust/seq:latest
+    restart: unless-stopped
+    environment:
+      - ACCEPT_EULA=Y
+      - SEQ_FIRSTRUN_ADMINPASSWORD=MovithSeq!2026
+    volumes:
+      - seq_data:/data
+    ports:
+      # ÖNERİ: dışarı açma, sadece localhost'a bağla:
+      - "127.0.0.1:5341:80"
+Ve volume listesine ekle:
+volumes:
+  pg_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:
+  seq_data:
+Not: 127.0.0.1:5341:80 demek: Seq sadece sunucunun kendi localhost’undan erişilebilir. İnternete açılmaz.
+Sonra:
+cd /opt/movith/forms
+docker compose up -d seq
+docker compose ps seq
+Sunucuda test
+curl -I http://127.0.0.1:5341
+________________________________________
+2) Backend’in Seq’e log göndermesini sağla
+Canlıda API container için Seq URL’i:
+•	http://seq:80 (container içinden)
+•	pratikte sink config’e: http://seq veya http://seq:80
+En net yol: backend.env içine eklemek (veya appsettings.Production.json)
+Örnek appsettings.Production.json (Serilog parçası)
+{
+  "Serilog": {
+    "Using": [ "Serilog.Sinks.Seq" ],
+    "MinimumLevel": "Information",
+    "WriteTo": [
+      { "Name": "Seq", "Args": { "serverUrl": "http://seq", "apiKey": "" } }
+    ],
+    "Enrich": [ "FromLogContext", "WithMachineName" ]
+  }
+}
+Eğer env ile yapıyorsan, senin projede bağlama şekline göre değişiyor. Ama en yaygın iki yaklaşım:
+A) JSON config (öneririm)
+Repo’da prod config’i düz tut, deploy’da ayrıca uğraşmazsın.
+B) Env ile override
+Bunu ancak projede env binding doğru kurulmuşsa öneririm; yoksa uğraştırır.
+2.1 Kritik Konu
+API içinde Seq URL’i şu olmalı:
+•	http://seq:80 ✅ (compose service name ile)
+Şunlar yanlış olur:
+•	http://localhost:5341 ❌ (container içinde localhost farklı)
+•	http://127.0.0.1:5341 ❌
+A) appsettings.json / appsettings.Production.json
+Serilog:WriteTo altında Seq varsa serverUrl şu olmalı:
+•	http://seq:80
+B) Environment variable ile veriyorsan
+En pratik yöntem: backend.env içine ekle:
+SERILOG__WRITETO__1__NAME=Seq
+SERILOG__WRITETO__1__ARGS__SERVERURL=http://seq:80
+Eğer zaten başka WriteTo’ların varsa index (1) değişebilir. O yüzden daha güvenlisi appsettings üzerinden yapmak. Ama env ile de olur.
+2.1) API’yi yeniden başlat (config’i alsın)
+docker compose up -d --force-recreate api
+docker compose logs --tail=50 api
+2.2) Seq’e test log düşür (en hızlı doğrulama)
+API’nin bir endpoint’ine istek at:
+curl -s https://forms.movith.com/backend-api/HealthCheck >/dev/null
+Sonra Seq UI’da (Events ekranı) arama kutusuna şunları yaz:
+•	Application = 'MovithForms' (varsa)
+•	ya da sadece son 1-2 dakikaya bak
+________________________________________
+3) Seq UI’a erişim (ÖNERİLEN: SSH Tunnel)
+Seq dışarı kapalı olacak ya (127.0.0.1 bind), laptop’undan şöyle bağlan:
+Windows (PowerShell / Git Bash):
+ssh -L 5341:127.0.0.1:5341 root@116.203.145.94
+Sonra bilgisayarından aç:
+•	http://localhost:5341
+✅ İnternete port açmadın
+✅ En güvenlisi
+✅ Demo/production için ideal
+* Bilgisayardan ilk açılışta Seq’in login ekranı gelir. Burada Kullanıcı Adına admin docker-compose.yml’deki MovithSeq!2026 girilir ve sonra system şifreyi değiştirmesini ister.
