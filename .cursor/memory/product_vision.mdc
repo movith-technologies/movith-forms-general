@@ -1,0 +1,136 @@
+---
+alwaysApply: true
+---
+id: movith_product_vision
+scope: global
+priority: critical
+
+Movith Forms – Product Vision
+
+Movith Forms is a multi-tenant, enterprise-grade workflow and form management platform.
+
+It is NOT:
+
+A simple form builder
+
+A decorative admin panel
+
+A low-code toy product
+
+An AI experimentation sandbox
+
+It IS:
+
+An operational control system
+
+A decision-support platform
+
+A workflow performance engine
+
+A scalable SaaS infrastructure product
+
+Core Purpose
+
+Movith Forms enables organizations to:
+
+Design structured workflows
+
+Collect operational data via forms
+
+Monitor performance
+
+Detect bottlenecks
+
+Enforce SLAs
+
+Maintain governance and auditability
+
+The platform must always prioritize:
+
+Operational clarity
+
+Data integrity
+
+Tenant isolation
+
+Architectural consistency
+
+Extensibility
+
+Target Audience
+
+Operations managers
+
+Quality teams
+
+Process owners
+
+Digital transformation leaders
+
+Enterprise IT governance teams
+
+Product Philosophy
+
+Every feature must answer at least one of these:
+
+Does this improve operational visibility?
+
+Does this improve workflow efficiency?
+
+Does this reduce process risk?
+
+Does this strengthen governance?
+
+If not, it does not belong in the core product.
+
+Non-Negotiable Principles
+
+Clean Architecture must never be violated.
+
+Multi-tenant data isolation is mandatory.
+
+Business logic lives in Application layer.
+
+UI is presentation only.
+
+Health and performance insights are backend-driven.
+
+No feature may bypass domain rules.
+
+Long-Term Vision
+
+Movith Forms aims to become:
+
+A scalable multi-tenant SaaS platform
+
+Enterprise-ready (IAM, SLA, audit)
+
+Decision-support oriented
+
+Extensible via integrations
+
+Insight-driven (rule-based → AI-enhanced)
+
+The system must be designed for:
+
+Large-scale tenant adoption
+
+Performance-sensitive environments
+
+Long-term maintainability
+
+Governance-compliant enterprises
+
+What Movith Forms Must Never Become
+
+A monolithic feature soup
+
+A UI-driven logic system
+
+A tenant-leaking architecture
+
+A tightly coupled codebase
+
+A fragile dashboard-only analytics tool
+
+All architectural and product decisions must align with this vision.

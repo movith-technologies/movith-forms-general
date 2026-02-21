@@ -1,0 +1,152 @@
+---
+alwaysApply: true
+---
+Movith Forms – SaaS Strategy Framework
+
+Movith Forms is designed as a scalable multi-tenant SaaS platform.
+
+All engineering decisions must support SaaS scalability.
+
+Multi-Tenant Strategy
+
+Each tenant:
+
+Has logically isolated data
+
+Has its own workflows
+
+Has its own submissions
+
+Has isolated configuration
+
+Cannot access other tenant data
+
+Rules:
+
+All tenant-scoped entities must include TenantId.
+
+All queries must enforce tenant filtering.
+
+Background jobs must be tenant-aware.
+
+Aggregations must respect tenant scope.
+
+SaaS Growth Strategy
+
+The platform must support:
+
+Horizontal scaling
+
+Feature gating (plan-based access)
+
+Usage-based analytics
+
+Performance monitoring
+
+SLA-based service tiers
+
+Future-ready design for:
+
+Enterprise tenants
+
+Mid-size companies
+
+High-volume operational workflows
+
+Product Scaling Principles
+
+Features must be modular.
+
+Aggregation logic must be reusable.
+
+Dashboard data must be computed efficiently.
+
+Read-heavy operations should be cacheable.
+
+Performance must degrade gracefully under load.
+
+Plan & Feature Gating Model
+
+The system must support:
+
+Free / Basic / Pro / Enterprise tiers (future-ready)
+
+Feature flags per tenant
+
+Rate limits per tenant
+
+API usage tracking
+
+SLA differentiation
+
+No feature should assume universal availability.
+
+SaaS KPI Awareness
+
+The system must be capable of tracking:
+
+Active tenants
+
+Monthly active users
+
+Submission volume
+
+Workflow execution count
+
+Error rate
+
+SLA compliance
+
+Health score per tenant
+
+These KPIs are part of the core architecture and not afterthoughts.
+
+Security & Governance Readiness
+
+The SaaS strategy must be compatible with:
+
+IAM integration
+
+Role-based access control
+
+Audit logging
+
+Encryption at rest and in transit
+
+Incident monitoring
+
+Security is part of architecture, not an optional add-on.
+
+Operational Maturity
+
+The platform must evolve toward:
+
+Insight-driven dashboards
+
+Bottleneck detection
+
+Performance anomaly detection
+
+SLA breach monitoring
+
+Automated risk alerts
+
+The SaaS strategy prioritizes operational intelligence over cosmetic features.
+
+Engineering Guardrail
+
+If a proposed implementation:
+
+Breaks tenant isolation
+
+Introduces tight coupling
+
+Moves business logic to UI
+
+Ignores scalability concerns
+
+Hardcodes plan logic
+
+The agent must refuse and propose a compliant alternative.
+
+All implementation decisions must align with SaaS scalability and governance.

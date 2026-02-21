@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+CRITICAL: Read and strictly follow docs/ARCHITECTURE_RULES.md before any code change. All rules in that document are mandatory. This applies to agent role, architecture, domain context, and dashboard rules.
