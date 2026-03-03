@@ -253,6 +253,18 @@ All backend code must support:
 - Regulatory compliance extension
 
 ------------------------------------------------------------
+EXCEPTION HANDLING
+------------------------------------------------------------
+
+Exception and error-handling rules are defined in a separate document.
+Before adding or refactoring exceptions, read and apply:
+
+  docs/engineering/BACKEND_EXCEPTION_HANDLING.md
+
+Key rule: one exception type per HTTP status; all mapping in
+CustomExceptionHandler; no try-catch in endpoints for status mapping.
+
+------------------------------------------------------------
 FINAL RULE
 ------------------------------------------------------------
 
