@@ -224,27 +224,137 @@ SECTION 9 — MINIMAL API & MEDIATR ENFORCEMENT RULES
 --------------------------------------------
 
 - Route Naming: ALWAYS use `nameof(MethodName)` for the route pattern in `MapGet`/`MapPost`/etc. to ensure strongly typed and refactor-safe endpoint names.
-- Parameter Binding: ALWAYS use `[AsParameters]` for MediatR Requests (Commands/Queries) in endpoint signatures instead of `[FromBody]` or manual parameter mapping.
+- Parameter Binding:
+  - **GET endpoints**: ALWAYS use `[AsParameters]` on MediatR Query classes so query-string params are bound automatically.
+  - **POST/PUT endpoints**: Do NOT use `[AsParameters]`. Pass the MediatR Command class directly — minimal APIs bind it from the JSON body automatically.
+  - NEVER use `[FromBody]` or manual parameter mapping.
+  - Reference: `FormDefinitions.Create` (POST without `[AsParameters]`), `FormDefinitions.List` (GET with `[AsParameters]`).
 - Authorization: ALWAYS place the `[Authorize]` attribute directly on the MediatR Request (Command or Query) class in the Application layer, not just on the endpoint.
 
 --------------------------------------------
-SECTION 10 — FRONTEND API & DATA FETCHING (STRICT)
+SECTION 10 — REPOSITORY PATTERN (STRICT)
+--------------------------------------------
+
+Every repository MUST follow the IBaseRepo<T> / BaseRepo<T> inheritance pattern. No exceptions.
+
+Rule 1 — Interface (Application layer):
+  Every repository interface MUST extend IBaseRepo<TEntity>.
+  Only declare methods that are domain-specific (not already in IBaseRepo<T>).
+
+Rule 2 — Implementation (Infrastructure layer):
+  Every repository class MUST extend BaseRepo<TEntity> using the primary constructor syntax
+  and implement its domain-specific interface.
+
+Rule 3 — Do NOT re-declare inherited methods:
+  The following are already provided by IBaseRepo<T> / BaseRepo<T>. NEVER add them again:
+    - AddAsync(T entity, CancellationToken)
+    - Add(T entity)
+    - GetByIdAsync(Guid id, CancellationToken)
+    - UpdateAsync(T entity, CancellationToken)
+    - DeleteAsync(T entity, CancellationToken)
+    - SoftDeleteAsync(T entity, CancellationToken)
+    - SaveChangesAsync(CancellationToken)
+    - Remove(T entity)
+
+CORRECT:
+```csharp
+// Application/Common/Interfaces/IBiReportRepository.cs
+public interface IBiReportRepository : IBaseRepo<BiReport>
+{
+    Task<List<BiReportDto>> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken);
+}
+
+// Infrastructure/Repositories/BiReportRepository.cs
+public class BiReportRepository(ApplicationDbContext context)
+    : BaseRepo<BiReport>(context), IBiReportRepository
+{
+    public async Task<List<BiReportDto>> GetByTenantIdAsync(...) { ... }
+}
+```
+
+FORBIDDEN:
+```csharp
+// ❌ Missing IBaseRepo<T> inheritance
+public interface IBiReportRepository
+{
+    Task<BiReport> AddAsync(...);      // Already in IBaseRepo
+    Task<BiReport?> GetByIdAsync(...); // Already in IBaseRepo
+    ...
+}
+
+// ❌ Missing BaseRepo<T> inheritance
+public class BiReportRepository : IBiReportRepository
+{
+    private readonly ApplicationDbContext _context;
+    public BiReportRepository(ApplicationDbContext context) { _context = context; }
+    public async Task<BiReport> AddAsync(...) { ... } // Manually re-implemented
+}
+```
+
+Reference implementations: IFormInstanceRepository, IFormDefinitionRepository, FormInstanceRepository, FormDefinitionRepository.
+
+
+--------------------------------------------
+SECTION 11 — FRONTEND API & DATA FETCHING (STRICT)
 --------------------------------------------
 
 Backend calls MUST go through Next.js API Route Handlers. Never bypass this pattern.
 
 Data fetching flow:
-1. Client components call `routeHandlerClient.get/post(...)` with path like `/dashboard`, `/forms/pending-approvals`, etc.
+1. Client components call `routeHandlerClient.get/post(...)` with path from `API_ENDPOINTS` (e.g. `/bi-reports`).
 2. Route handlers (`src/app/api/*/route.ts`) use `backendFetch` + `withAuthHeader` to call the backend.
-3. NEVER use axios, fetch(NEXT_PUBLIC_BACKEND_API_URL), or direct backend URLs from client code.
+3. NEVER use raw `fetch()`, axios, or `fetch(NEXT_PUBLIC_BACKEND_API_URL)` from client code.
 
-Rules:
-- Dashboard, forms, workflows, and any backend-backed data: Create a route handler in `src/app/api/.../route.ts`, use `backendFetch` and `withAuthHeader` from `@/lib/api/apiClient` and `@/lib/api/auth-server`.
-- Client-side data hooks: Use `useQuery` + `routeHandlerClient.get('/api-path')`. The path is the Next.js API route (e.g. `/dashboard`), NOT the backend URL.
-- NEVER add `middleware.ts` that attempts JWT verification with `jwtVerify`: Backend uses ASP.NET Core `AddBearerToken` (opaque Data Protection token), not standard JWT. Such middleware will always fail.
-- Route protection: Use layout server components (cookies) and `useAuthGuard` + `accessControl.json`. Do not rely on middleware for auth.
+CORRECT patterns:
 
-Reference implementation: `src/app/api/dashboard/route.ts`, `src/app/api/forms/pending-approvals/route.ts`.
+```ts
+// ✅ page.tsx / component — use routeHandlerClient
+import { routeHandlerClient } from '@/lib/api/routeHandlerClient';
+import { API_ENDPOINTS } from '@/lib/api/endpoints';
+
+const res = await routeHandlerClient.get<{ data: BiReport[] }>(API_ENDPOINTS.biReports.getAll);
+const res = await routeHandlerClient.post(API_ENDPOINTS.biReports.create, payload);
+```
+
+```ts
+// ✅ route.ts — use backendFetch + withAuthHeader; paths are ACTUAL BACKEND paths (PascalCase controller)
+import { backendFetch } from '@/lib/api/apiClient';
+import { withAuthHeader } from '@/lib/api/auth-server';
+
+export async function GET() {
+    const data = await backendFetch('/BiReports/List', await withAuthHeader());
+    return NextResponse.json(data);
+}
+export async function POST(request: NextRequest) {
+    const body = await request.json();
+    const data = await backendFetch('/BiReports/Create', await withAuthHeader({ method: 'POST', body: JSON.stringify(body) }));
+    return NextResponse.json(data);
+}
+```
+
+```ts
+// ✅ endpoints.ts values — these are route handler paths (e.g. /bi-reports), NOT backend API paths
+export const API_ENDPOINTS = {
+  biReports: {
+    getAll: '/bi-reports',   // → calls src/app/api/bi-reports/route.ts GET
+    create: '/bi-reports',   // → calls src/app/api/bi-reports/route.ts POST
+  }
+}
+```
+
+FORBIDDEN:
+```ts
+// ❌ raw fetch from page/store
+const res = await fetch('/api/bi-reports');
+
+// ❌ wrong path in backendFetch (these are route handler paths, not backend paths)
+const data = await backendFetch(API_ENDPOINTS.biReports.getAll, ...);
+
+// ❌ direct backend URL from client
+const res = await fetch(process.env.NEXT_PUBLIC_BACKEND_API_URL + '/BiReports/List');
+```
+
+Reference implementation: `src/app/api/form-definitions/route.ts` for route.ts pattern.
 
 --------------------------------------------
 END OF RULESET
@@ -252,7 +362,103 @@ END OF RULESET
 
 ---
 
-## FROM: 02_domain_context.mdc
+## SECTION 11 — BACKEND CONCRETE PATTERNS (MANDATORY)
+
+### Domain Entity Rules
+
+**Entities live directly in `src/Domain/Entities/` — NO sub-folders.**
+
+```csharp
+// ✅ CORRECT
+namespace MovithForms.Domain.Entities;
+
+public class BiReport : BaseAuditableEntity, ITenantEntity
+{
+    public new Guid Id { get; set; }  // Must shadow base int Id
+    public Guid TenantId { get; set; }  // ITenantEntity requirement
+    public string Title { get; set; } = string.Empty;
+    // ... other properties with PUBLIC set accessors
+}
+```
+
+```csharp
+// ❌ FORBIDDEN
+namespace MovithForms.Domain.Entities.BiReports;  // ← sub-namespace NOT allowed
+
+public class BiReport : BaseAuditableEntity  // ← must implement ITenantEntity
+{
+    public Guid TenantId { get; private set; }  // ← private set NOT correct for entities
+
+    public static BiReport Create(...) { ... }  // ← factory methods NOT allowed
+    public void Update(...) { ... }             // ← update methods NOT allowed
+}
+```
+
+**Entity rules summary:**
+- Implement `ITenantEntity` for all tenant-scoped entities.
+- Use `public new Guid Id { get; set; }` to shadow the base class `int Id`.
+- All properties: `public { get; set; }` — no `private set`.
+- No factory methods (`Create()`), no domain method (`Update()`, `Activate()`, etc.).
+- No EF Core, no MediatR, no HTTP references.
+
+---
+
+### CQRS File Layout Rules
+
+**Commands:** `src/Application/Commands/[Feature]/[ActionName].cs`  
+**Queries:** `src/Application/Queries/[Feature]/[QueryName].cs`  
+**DTOs:** `src/Application/DTOs/[Name]Dto.cs` (flat directory, no sub-folders)
+
+**One file = one command + its handler**, or **one query + its handler**.
+
+```
+// ✅ CORRECT layout
+Application/
+├── Commands/
+│   ├── BiReports/
+│   │   └── CreateBiReport.cs         ← Command + Handler in ONE file
+│   ├── FormDefinitions/
+│   │   └── CreateFormDefinition.cs
+├── Queries/
+│   ├── BiReports/
+│   │   └── GetBiReports.cs           ← Query + Handler in ONE file
+├── DTOs/
+│   └── BiReportDto.cs                ← Flat, no sub-folders
+```
+
+```
+// ❌ FORBIDDEN layout
+Application/
+├── BiReports/                         ← Feature sub-folder in Application NOT allowed
+│   ├── Commands/
+│   │   ├── CreateBiReportCommand.cs    ← Separate command file NOT correct
+│   │   └── CreateBiReportCommandHandler.cs  ← Separate handler file NOT correct
+│   ├── Queries/
+│   │   ├── GetBiReportsQuery.cs
+│   │   └── GetBiReportsQueryHandler.cs
+│   └── Queries/Dtos/
+│       └── BiReportDto.cs             ← DTOs nested under feature NOT correct
+```
+
+---
+
+### Object Initialization
+
+Entity creation in Handlers must use standard C# object initializer — never factory/static methods:
+
+```csharp
+// ✅ CORRECT
+var biReport = new BiReport
+{
+    TenantId = tenantId,
+    Title = request.Title,
+};
+
+// ❌ FORBIDDEN
+var biReport = BiReport.Create(tenantId, request.Title, ...);
+```
+
+
 
 Core Concepts:
 - Tenant
